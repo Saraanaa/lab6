@@ -1,7 +1,7 @@
 # Лаборатори 6 — Тест сонголтын аргууд
 
-**Оюутны нэр:** `[НЭРЭЭ ОРУУЛНА УУ]`  
-**Оюутны код:** `[КОДОО ОРУУЛНА УУ]`
+**Оюутны нэр:** Г. Саранчимэг
+**Оюутны код:** B232274001
 
 Энэ лаборатори нь код хэрэгжүүлэх биш, банкны шилжүүлгийн функцийн тестийн дизайн хийх ажил юм. PICT-ийн эх кодыг лабын репогоос гадуур build хийсэн бөгөөд build-ийн нотолгоо [results/pict-build.txt](results/pict-build.txt)-д байна.
 
@@ -15,9 +15,9 @@ API: `POST /transfer { "from": ID, "to": ID, "amount": NUM, "currency": CODE }`.
 
 | Параметр/орчин | Сонголт ба төлөөлөх утга | Тэмдэглэгээ | Үндэслэл |
 |---|---|---|---|
-| from | Valid `A-1001`; Frozen `A-1002`; Missing `A-9999` | Frozen/Missing `[ERROR]`; Valid `[SINGLE]` | Байхгүй болон царцаасан эх данс тусдаа алдаа өгнө. |
-| to | Valid `B-2001`; Missing `B-9999`; SameAsFrom `A-1001` | Missing/SameAsFrom `[ERROR]`; Valid `[SINGLE]` | Байхгүй эсвэл эхтэй ижил хүлээн авагчийг ялгана. |
-| amount | Normal `100`; Zero `0`; OverBalance `1500`; OverLimit `6000` | Буруу гурвынх `[ERROR]`; Normal `[SINGLE]` | Эерэг, үлдэгдэл, өдрийн лимитийн гурван өөр нөхцөл. |
+| from | Valid `A-1001`; Frozen `A-1002`; Missing `A-9999` | Frozen/Missing `[ERROR]` | Байхгүй болон царцаасан эх данс тусдаа алдаа өгнө. |
+| to | Valid `B-2001`; Missing `B-9999`; SameAsFrom `A-1001` | Missing/SameAsFrom `[ERROR]` | Байхгүй эсвэл эхтэй ижил хүлээн авагчийг ялгана. |
+| amount | Normal `100`; Zero `0`; OverBalance `1500`; OverLimit `6000` | Zero/OverBalance `[ERROR]`; OverLimit `[ERROR, SINGLE]` | Эерэг, үлдэгдэл, өдрийн лимитийн гурван өөр нөхцөл. `OverLimit=6000` нь өдрийн лимитийн хил давсан онцгой утга тул жинхэнэ `[SINGLE]`. |
 | currency | Same `MNT`; Different `USD` | `[IF]` | Өөр валют бол хөрвүүлэлт хийнэ, өөрөө алдаа биш. |
 | далд орчин | Balance `1000 MNT`; daily used `0`; daily limit `5000` | `[IF/property]` | OverBalance ба OverLimit-ийг тусгаарлахын тулд орчин хэрэгтэй. |
 | ханш | `1 USD = 3500 MNT`, rate available | `[IF/property]` | Шалгалтыг хөрвүүлсний дараах дүнгээр хийнэ. |
@@ -29,7 +29,7 @@ IF from = Missing THEN amount = Normal
 IF to = Missing THEN amount = Normal
 ```
 
-Эдгээр IF нь Missing алдааг amount-ийн алдаатай хольж error masking үүсгэхгүй. `Valid/Valid/Normal` нь happy path-ийн нэг representative тул `[SINGLE]`; Frozen, Missing болон amount-ийн буруу утгууд нь тусдаа `[ERROR]` representative юм.
+Эдгээр IF нь Missing алдааг amount-ийн алдаатай хольж error masking үүсгэхгүй. `Valid/Valid/Normal` нь энгийн happy path representative; `[SINGLE]` нь хэвийн утга биш, зөвхөн хил эсвэл онцгой утгыг тэмдэглэнэ. A3-ийн 8-р мөрөнд `OverLimit=6000`-ийг энэ утгаар ашигласан.
 
 Хязгаарлалтгүй олонлог `3 × 3 × 4 × 2 = 72`. IF-үүдийн дараа `6 + 6 - 2 + 32 = 42`, тиймээс category-partition-ийн тооцоо **72 → 42**.
 
@@ -44,7 +44,7 @@ IF to = Missing THEN amount = Normal
 | 5 | Valid `A-1001` | SameAsFrom `A-1001` | 100 | MNT | `200 ERROR_SAME_ACCOUNT` |
 | 6 | Valid `A-1001` | Valid `B-2001` | 0 | MNT | `200 ERROR_BAD_AMOUNT` |
 | 7 | Valid `A-1001` | Valid `B-2001` | 1500 | MNT | `200 ERROR_INSUFFICIENT` |
-| 8 | Valid `A-1001` | Valid `B-2001` | 6000 | MNT | `200 ERROR_LIMIT` |
+| 8 | Valid `A-1001` | Valid `B-2001` | 6000 | MNT | `200 ERROR_LIMIT` — **SINGLE (лимитийн хил давсан утга)** |
 | 9 | Valid `A-1001` | Valid `B-2001` | 100 | USD | `201 OK` after conversion |
 | 10 | Missing | Missing | 0 | MNT | `200 ERROR_NO_FROM` — from давуу |
 | 11 | Valid | Missing | 0 | MNT | `200 ERROR_NO_TO` — to давуу |
@@ -69,13 +69,13 @@ IF to = Missing THEN amount = Normal
 
 [transfer-nc.model](transfer-nc.model) нь хязгаарлалтгүй, [transfer.model](transfer.model) нь IF-тэй, [transfer-neg.model](transfer-neg.model) нь ERROR утгуудыг `~` negative-ээр тэмдэглэсэн.
 
-| Модель | Мөр | Happy path мөр | Тайлбар |
-|---|---:|---:|---|
-| transfer-nc | 13 | 1 | Энгийн утга тул олон алдааг нэг мөрт хослуулна |
-| transfer | 12 | 0 | IF үйлчилсэн; энэ run-д happy path сонгогдоогүй |
-| transfer-neg | 16 | 2 | Нэг мөрт хамгийн ихдээ нэг negative утга байна |
+| Модель | Мөр | Happy path мөр | 0 алдаа | 1 алдаа | 2 алдаа | 3 алдаа | Тайлбар |
+|---|---:|---:|---:|---:|---:|---:|---|
+| transfer-nc | 13 | 1 | 1 | 1 | 8 | 3 | Энгийн утга тул олон алдааг нэг мөрт хослуулна |
+| transfer | 12 | 0 | 0 | 3 | 7 | 2 | IF үйлчилсэн; энэ run-д happy path сонгогдоогүй |
+| transfer-neg | 16 | 2 | 2 | 14 | 0 | 0 | `~`-ээр тэмдэглэсэн negative утгын тоогоор тоолсон |
 
-`transfer.model` happy path-ийг хориглоогүй ч pairwise алгоритм заавал сонгохгүй. `~` нь error masking-ийг бууруулдаг боловч Missing үед Normal amount байх ёстой гэх бизнесийн IF-ийг орлохгүй. Тиймээс A2-ын хязгаарлалт шаардлагатай хэвээр.
+`transfer.model` happy path-ийг хориглоогүй ч pairwise алгоритм заавал сонгохгүй. `transfer-neg.model`-д IF огт байхгүй тул `~Missing` гарсан бүх мөр `Normal` amount-тай гарсан (үр дүнгийн 8, 9-р мөр). Иймээс энэ модель `~` тэмдэглэгээгээр negative утгыг ялгаж байгаа боловч Missing үед amount-ийг IF-ээр удирдаж байгаа гэсэн үг биш; бизнесийн IF зөвхөн `transfer.model`-д байна.
 
 ### Бодит тест кейсүүд
 
